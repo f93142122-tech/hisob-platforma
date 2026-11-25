@@ -38,6 +38,7 @@ export function Settings() {
 
 function General() {
   const { t, script, setScript } = useT();
+  const { user } = useAuth();
   const toast = useToast();
   const [pw, setPw] = useState({ old: '', next: '', again: '' });
   const change = async (e: React.FormEvent) => {
@@ -66,6 +67,66 @@ function General() {
         <Field label={t('Yangi parolni takrorlang')}><input className="input" type="password" autoComplete="new-password" value={pw.again} onChange={(e) => setPw({ ...pw, again: e.target.value })} /></Field>
         <div className="row-end"><button className="btn btn-primary">{t('Saqlash')}</button></div>
       </form>
+      {isAdmin(user) && <DeleteAccount />}
+    </div>
+  );
+}
+
+/** Tasdiqlash so'zi: "hayir" (katta-kichik harf farqsiz; kirill interfeysda "ҳайир" ham). Server ham xuddi shunday tekshiradi. */
+const isConfirmWord = (v: string) => ['hayir', 'ҳайир', 'хайир'].includes(v.trim().toLowerCase());
+
+/** Akkauntni butunlay o'chirish: do'kon nomi, parol va barcha ma'lumotlar. Qayta tiklanmaydi. */
+function DeleteAccount() {
+  const { t } = useT();
+  const { logout } = useAuth();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [word, setWord] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ready = isConfirmWord(word);
+
+  const remove = async () => {
+    if (!ready) return;
+    setBusy(true);
+    try {
+      await api('/api/account/delete', { method: 'POST', body: { confirm: word } });
+      setOpen(false);
+      logout(); // platforma yana "do'kon nomi + parol" bilan ro'yxatdan o'tish oynasini ko'rsatadi
+      toast('ok', t('Akkaunt va barcha ma’lumotlar o‘chirildi'));
+    } catch (e: any) {
+      toast('error', e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="card card-pad" style={{ gridColumn: '1 / -1', borderColor: 'var(--danger)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <h2 className="neg">{t('Akkauntni o‘chirish')}</h2>
+      <p className="muted" style={{ margin: 0 }}>
+        {t('Do‘kon nomi, parol, barcha mahsulotlar, savdolar, nasiyalar, xarajatlar, hisobotlar va foydalanuvchilar butunlay o‘chiriladi. Akkauntni qayta tiklab bo‘lmaydi — keyin yangi do‘kon nomi va parol bilan yangi akkaunt ochiladi.')}
+      </p>
+      <div><button className="btn btn-danger" onClick={() => { setWord(''); setOpen(true); }}>{t('Akkauntni o‘chirish')}</button></div>
+      {open && (
+        <Modal title={t('Akkauntni butunlay o‘chirish')} onClose={() => !busy && setOpen(false)} footer={<>
+          <button className="btn" disabled={busy} onClick={() => setOpen(false)}>{t('Bekor qilish')}</button>
+          <button className="btn btn-danger" disabled={!ready || busy} onClick={remove}>{busy ? t('O‘chirilmoqda...') : t('Hammasini o‘chirish')}</button>
+        </>}>
+          <div className="alert alert-danger">{t('Diqqat! Bu amalni ortga qaytarib bo‘lmaydi.')}</div>
+          <p style={{ margin: 0 }}>{t('Quyidagilar butunlay o‘chiriladi:')}</p>
+          <ul style={{ margin: 0, paddingLeft: 20 }} className="small">
+            <li>{t('do‘kon nomi va parol (hisob)')}</li>
+            <li>{t('barcha mahsulotlar, kategoriyalar va ombor qoldiqlari')}</li>
+            <li>{t('barcha savdolar, qaytarishlar va nasiyalar')}</li>
+            <li>{t('xarajatlar, doimiy xarajatlar va kunlik hisobotlar')}</li>
+            <li>{t('sotuvchilar va amallar tarixi')}</li>
+          </ul>
+          <Field label={t('Tasdiqlash uchun quyidagi maydonga hayir deb yozing')}>
+            <input className="input" autoFocus value={word} placeholder="hayir" onChange={(e) => setWord(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); remove(); } }} style={ready ? { borderColor: 'var(--danger)' } : undefined} />
+          </Field>
+        </Modal>
+      )}
     </div>
   );
 }
